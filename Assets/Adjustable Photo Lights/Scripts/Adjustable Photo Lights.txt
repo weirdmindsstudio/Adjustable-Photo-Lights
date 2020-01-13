@@ -1,0 +1,200 @@
+local isChanged = false
+local freeze = false
+
+channel = 'lights.adjustable'
+
+local defaultConfig = {
+    active = true,
+    leftRightAngle = 0,
+    upDownAngle = 0,
+    upDownHeight = 0,
+    lightBrightness = 5,
+    lightAngle = 60,
+    positionX = 0,
+    positionZ = 0,
+    rotation = 0,
+    color = Vector.New(1, 1, 1)
+}
+local currentConfig
+
+function applySettings()
+    if currentConfig.active then
+        local lr = Space.Host.GetReference('LeftRight')
+        local rot = Quaternion.Euler(0, 0, currentConfig.leftRightAngle)
+        lr.LocalRotation = rot
+
+        local udt = Space.Host.GetReference('UpDownTilt')
+        local rot2 = Quaternion.Euler(0, currentConfig.upDownAngle, 0)
+        udt.LocalRotation = rot2
+
+        local udl = Space.Host.GetReference('UpDownLift')
+        local pos = Vector.New(0, 0, (currentConfig.upDownHeight / 100) + upperBaseHeight)
+        udl.LocalPosition = pos
+
+        local lamp = Space.Host.GetReference('Light')
+        lamp.Light.SpotAngle = currentConfig.lightAngle
+        lamp.Light.Intensity = currentConfig.lightBrightness
+        lamp.Light.Color = currentConfig.color
+        lamp.Light.Enabled = true
+
+        local lampFake = Space.Host.GetReference('LightFake')
+        if lampFake and lampFake.Alive then
+            lampFake.Light.Intensity = currentConfig.lightBrightness / 2
+            lampFake.Light.Color = currentConfig.color
+            lampFake.Light.Enabled = true
+        end
+
+        local base = Space.Host.GetReference('Base')
+        local basePos = Vector.New(currentConfig.positionX, 0, currentConfig.positionZ)
+        base.LocalPosition = basePos
+        base.LocalRotation = Quaternion.Euler(0, currentConfig.rotation, 0)
+    else
+        local lamp = Space.Host.GetReference('Light')
+        lamp.Light.Enabled = false
+
+        local lampFake = Space.Host.GetReference('LightFake')
+        if lampFake and lampFake.Alive then
+            lampFake.Light.Enabled = false
+        end
+    end
+end
+
+function update()
+    if not freeze then
+        logger.log('update called')
+        currentConfig.active = Space.Host.GetReference('LightActive').UIToggle.IsOn
+        currentConfig.leftRightAngle = Space.Host.GetReference('LeftRightAngle').UISlider.Value
+        currentConfig.upDownAngle = Space.Host.GetReference('UpDownAngle').UISlider.Value
+        currentConfig.upDownHeight = Space.Host.GetReference('UpDownHeight').UISlider.Value
+        currentConfig.lightBrightness = Space.Host.GetReference('LightBrightness').UISlider.Value
+        currentConfig.lightAngle = Space.Host.GetReference('LightAngle').UISlider.Value
+        currentConfig.positionX = Space.Host.GetReference('PositionX').UISlider.Value
+        currentConfig.positionZ = Space.Host.GetReference('PositionZ').UISlider.Value
+        currentConfig.rotation = Space.Host.GetReference('Rotation').UISlider.Value
+
+        isChanged = true
+
+        applySettings()
+    end
+end
+
+function showColorChooser()
+    local color = Color.New(currentConfig.color.X, currentConfig.color.Y, currentConfig.color.Z, 1.0)
+    Space.Dialogues.ColorPicker('Light color', 'Use', colorOnChange, colorOnSelect, colorOnCancel, color)
+end
+
+function colorOnChange(color)
+    -- no handling, but handler
+    logger.log('colorOnChange ', color)
+    local lamp = Space.Host.GetReference('Light')
+    lamp.Light.Color = Vector.New(color.r, color.g, color.b)
+
+    local lampFake = Space.Host.GetReference('LightFake')
+    if lampFake and lampFake.Alive then
+        lampFake.Light.Color = Vector.New(color.r, color.g, color.b)
+    end
+end
+
+function colorOnSelect(color)
+    logger.log('colorOnSelect ', color)
+    currentConfig.color = Vector.New(color.r, color.g, color.b)
+    isChanged = true
+    applySettings()
+end
+
+function colorOnCancel()
+    logger.log('colorOnCancel')
+    applySettings()
+end
+
+function updateDisplay()
+    logger.log("updateDisplay", currentConfig)
+    freeze = true
+    local lra = Space.Host.GetReference('LeftRightAngle')
+    lra.UISlider.Value = currentConfig.leftRightAngle
+    local udta = Space.Host.GetReference('UpDownAngle')
+    udta.UISlider.Value = currentConfig.upDownAngle
+    local udh = Space.Host.GetReference('UpDownHeight')
+    udh.UISlider.Value = currentConfig.upDownHeight
+    local brightness = Space.Host.GetReference('LightBrightness')
+    brightness.UISlider.Value = currentConfig.lightBrightness
+    local angle = Space.Host.GetReference('LightAngle')
+    angle.UISlider.Value = currentConfig.lightAngle
+    local posX = Space.Host.GetReference('PositionX')
+    posX.UISlider.Value = currentConfig.positionX
+    local posZ = Space.Host.GetReference('PositionZ')
+    posZ.UISlider.Value = currentConfig.positionZ
+    local baseRot = Space.Host.GetReference('Rotation')
+    baseRot.UISlider.Value = currentConfig.rotation
+    freeze = false
+end
+
+function reset()
+    freeze = true
+    currentConfig = json.parse(json.serialize(defaultConfig))
+
+    local lra = Space.Host.GetReference('LeftRightAngle')
+    lra.UISlider.Value = currentConfig.leftRightAngle
+    local udta = Space.Host.GetReference('UpDownAngle')
+    udta.UISlider.Value = currentConfig.upDownAngle
+    local udh = Space.Host.GetReference('UpDownHeight')
+    udh.UISlider.Value = currentConfig.upDownHeight
+    local brightness = Space.Host.GetReference('LightBrightness')
+    brightness.UISlider.Value = currentConfig.lightBrightness
+    local angle = Space.Host.GetReference('LightAngle')
+    angle.UISlider.Value = currentConfig.lightAngle
+    local posX = Space.Host.GetReference('PositionX')
+    posX.UISlider.Value = currentConfig.positionX
+    local posZ = Space.Host.GetReference('PositionZ')
+    posZ.UISlider.Value = currentConfig.positionZ
+    local baseRot = Space.Host.GetReference('Rotation')
+    baseRot.UISlider.Value = currentConfig.rotation
+    freeze = false
+    applySettings()
+end
+
+function monitorChanges()
+    while true do
+        if isChanged then
+            logger.log("invoking store")
+            isChanged = false
+            local update = {}
+            update.command = 'storeConfig'
+            update.source = Space.Host.ExecutingObject.GlobalID
+            update.settings = currentConfig
+            Space.Network.SendNetworkMessage(channel, update)
+        end
+        coroutine.yield(0.5)
+    end
+end
+
+function onConfigRecieve(data)
+    logger.log('onConfigRecieve', data)
+    local update = data.Message
+    if update.command == 'setConfig' and update.source == Space.Host.ExecutingObject.GlobalID then
+        currentConfig = update.settings
+        if currentConfig == nil or currentConfig.leftRightAngle == nil then
+            currentConfig = json.parse(json.serialize(defaultConfig))
+        end
+        updateDisplay()
+        applySettings()
+    end
+end
+
+function init()
+    Space.Network.SubscribeToNetwork(channel, onConfigRecieve)
+    Space.Host.StartCoroutine(monitorChanges, nil)
+
+    currentConfig = json.parse(json.serialize(defaultConfig))
+
+    local command = {}
+    command.command = 'getConfig'
+    command.player = Space.Scene.PlayerAvatar.ID
+    command.source = Space.Host.ExecutingObject.GlobalID
+    logger.log('requesting config from server', command)
+    Space.Network.SendNetworkMessage(channel, command, true, false)
+
+    applySettings()
+end
+
+init()
